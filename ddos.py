@@ -2,32 +2,49 @@ import threading
 import requests
 import queue
 import time
+import os
 
 url = input("Nhập Url Web > ")
 num_threads = int(input("Nhập Threading > "))
 delay = float(input("Nhập Delay > "))
 
-with open("proxies.txt", "r") as f:
-    proxy_list = [line.strip() for line in f if line.strip()]
-
 proxy_queue = queue.Queue()
-for proxy in proxy_list:
-    proxy_queue.put(proxy)
+
+# Nếu có file proxies.txt thì mới load
+if os.path.exists("proxies.txt"):
+    with open("proxies.txt", "r") as f:
+        proxy_list = [line.strip() for line in f if line.strip()]
+    for proxy in proxy_list:
+        proxy_queue.put(proxy)
+    use_proxy = True
+else:
+    print("[!] Không tìm thấy proxies.txt -> Sử dụng direct request")
+    use_proxy = False
 
 def worker():
-    while not proxy_queue.empty():
-        proxy = proxy_queue.get()
-        try:
+    while True:
+        if use_proxy:
+            if proxy_queue.empty():
+                break
+            proxy = proxy_queue.get()
             proxies = {
                 "http": f"http://{proxy}",
                 "https": f"http://{proxy}"
             }
+        else:
+            proxies = None
+
+        try:
             response = requests.get(url, proxies=proxies, timeout=10)
-            print(f"[OK] {proxy} -> {response.status_code}")
+            proxy_info = proxy if use_proxy else "NO_PROXY"
+            print(f"[OK] {proxy_info} -> {response.status_code}")
         except Exception as e:
-            print(f"[ERR] {proxy} -> {e}")
+            proxy_info = proxy if use_proxy else "NO_PROXY"
+            print(f"[ERR] {proxy_info} -> {e}")
         time.sleep(delay)
-        proxy_queue.task_done()
+
+        if use_proxy:
+            proxy_queue.task_done()
 
 threads = []
 for _ in range(num_threads):
